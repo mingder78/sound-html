@@ -17,9 +17,9 @@
 </head>
 <body>
 
-<h1>streaming</h1>
+<h1>Talk-Over DJ</h1>
 <div class="mic" id="micBtn">Hold to Talk</div>
-<button id="startBtn">START MIC</button>
+<button id="startBtn">START MUSIC + MIC</button>
 <div class="status" id="status">Click the button → allow microphone</div>
 
 <script>
@@ -63,7 +63,7 @@ document.getElementById('startBtn').onclick = async () => {
   async function requestMicrophone() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({audio: true});
-      await setupAudioContextAndMic(stream);
+      setupAudioContextAndMic(stream);
     } catch (err) {
       // User denied or no mic → we continue anyway!
       micReady = false;
@@ -79,43 +79,14 @@ document.getElementById('startBtn').onclick = async () => {
   }
 
   // 3. Full setup when mic is allowed
-  async function setupAudioContextAndMic(stream) {
+  function setupAudioContextAndMic(stream) {
     ctx = new (window.AudioContext || window.webkitAudioContext)();
     if (Howler.masterNode) {
       Howler.masterNode.disconnect();
       Howler.masterNode.connect(ctx.destination);
     }
 
-  // 3) load our worklet
-    await ctx.audioWorklet.addModule("audio-processor.js");
     mic = ctx.createMediaStreamSource(stream);
-
-  // 5) create worklet node
-    const worklet = new AudioWorkletNode(ctx, "pcm-processor");
-
-// OPTIONAL: you can control buffer size by sending config
-worklet.port.postMessage({ chunkSize: 2048 });
-
-// 6) handle PCM data from processor
-worklet.port.onmessage = async (event) => {
-if (event.data.debug) {
-    console.log("[WORKLET DEBUG]", event.data);
-    return;
-  } 
-  const pcm = event.data;          // Float32Array
-  if (!pcm) return;
-
-  // convert to uint8 (your libp2p format)
-  const uint8 = new Uint8Array(pcm.buffer);
-console.log(uint8.toBase64()); // "HelloQ=="
-
-/*
-  if (libp2p.services.pubsub.getSubscribers(PUBSUB_AUDIO).length >= 2) {
-    libp2p.services.pubsub.publish(PUBSUB_AUDIO, uint8);
-  }
-*/
-};
-
     analyser = ctx.createAnalyser();
     analyser.fftSize = 512;
     mic.connect(analyser);
@@ -123,7 +94,7 @@ console.log(uint8.toBase64()); // "HelloQ=="
     // Hear yourself (optional)
     const out = ctx.createGain();
     out.gain.value = 0.7;
-    mic.connect(out).connect(worklet).connect(ctx.destination);
+    mic.connect(out).connect(ctx.destination);
 
     micReady = true;
     finishSetup();
