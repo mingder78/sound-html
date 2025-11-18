@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Talk-Over DJ – Never Hangs (2025)</title>
+<script src="https://cdn.jsdelivr.net/npm/howler@2.2.4/dist/howler.min.js"></script>
+<style>
+  body{font-family:system-ui;background:#000;color:#fff;text-align:center;padding:50px;min-height:100vh;}
+  h1{font-size:2.8em;margin:0 0 20px;}
+  .mic{font-size:150px;cursor:pointer;user-select:none;margin:40px;transition:transform .2s;}
+  .mic:active{transform:scale(0.95);}
+  button{padding:18px 40px;margin:15px;font-size:20px;border:none;border-radius:50px;background:#00d4ff;color:#000;font-weight:bold;cursor:pointer;}
+  button:disabled{background:#333;opacity:0.6;cursor:not-allowed;}
+  .status{margin:30px;font-size:24px;line-height:1.4;}
+  .ready{background:#00ff9d !important;}
+</style>
+</head>
+<body>
+
+<h1>Talk-Over DJ</h1>
+<div class="mic" id="micBtn">Hold to Talk</div>
+<button id="startBtn">START MUSIC + MIC</button>
+<div class="status" id="status">Click the button → allow microphone</div>
+
+<script>
+// Bulletproof settings
+Howler.preferWebAudio = true;
+Howler.html5PoolSize = 10;
+
+let music, ctx, mic, analyser, talking = false;
+let musicReady = false;
+let micReady = false;
+
+document.getElementById('startBtn').onclick = async () => {
+  const btn = document.getElementById('startBtn');
+  const status = document.getElementById('status');
+  
+  // Prevent double-click
+  if (btn.disabled) return;
+  btn.disabled = true;
+  btn.textContent = "Starting music…";
+  status.textContent = "Loading music…";
+
+  // 1. Start music (always works)
+  music = new Howl({
+    src: ['https://cdn.howler.js.org/demo/lofi.mp3'],
+    loop: true,
+    volume: 0.8,
+    autoplay: true,
+    onload() {
+      musicReady = true;
+      status.textContent = "Music ready! Requesting microphone…";
+      requestMicrophone();
+    },
+    onloaderror() {
+      status.textContent = "Music failed to load – using silent mode";
+      musicReady = true;
+      requestMicrophone();
+    }
+  });
+
+  // 2. Try to get microphone – NEVER hangs
+  async function requestMicrophone() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({audio: true});
+      setupAudioContextAndMic(stream);
+    } catch (err) {
+      // User denied or no mic → we continue anyway!
+      micReady = false;
+      finishSetup();
+      if (err.name === "NotAllowedError") {
+        status.textContent = "Microphone blocked – music still plays!<br><small>Allow mic in browser bar ↑ and click again</small>";
+      } else {
+        status.textContent = "No microphone found – music only<br><small>You can still use push-to-talk with mouse</small>";
+      }
+      btn.textContent = "Music Only (click again for mic)";
+      btn.disabled = false;
+    }
+  }
+
+  // 3. Full setup when mic is allowed
+  function setupAudioContextAndMic(stream) {
+    ctx = new (window.AudioContext || window.webkitAudioContext)();
+    if (Howler.masterNode) {
+      Howler.masterNode.disconnect();
+      Howler.masterNode.connect(ctx.destination);
+    }
+
+    mic = ctx.createMediaStreamSource(stream);
+    analyser = ctx.createAnalyser();
+    analyser.fftSize = 512;
+    mic.connect(analyser);
+
+    // Hear yourself (optional)
+    const out = ctx.createGain();
+    out.gain.value = 0.7;
+    mic.connect(out).connect(ctx.destination);
+
+    micReady = true;
+    finishSetup();
+  }
+
+  function finishSetup() {
+    if (musicReady) {
+      if (micReady) {
+        status.textContent = "ALL READY! Speak or hold mic → music ducks";
+        btn.textContent = "Running Perfectly";
+        btn.classList.add("ready");
+        startVAD();
+      } else {
+        status.innerHTML += "<br><br>Push-to-talk still works with mouse!";
+      }
+    }
+  }
+};
+
+// Voice Activity Detection (only runs if mic exists)
+function startVAD() {
+  if (!analyser) return;
+  const data = new Uint8Array(analyser.frequencyBinCount);
+  const loop = () => {
+    analyser.getByteTimeDomainData(data);
+    let sum = 0;
+    for (let i=0;i<data.length;i++) sum += Math.pow(data[i]/128-1, 2);
+    const rms = Math.sqrt(sum/data.length);
+    const nowTalking = rms > 0.025;
+
+    if (nowTalking !== talking) {
+      talking = nowTalking;
+      Howler.volume(talking ? 0.15 : 0.8, talking ? 50 : 700);
+      document.getElementById('status').innerHTML = talking 
+        ? "TALKING – Music ducked!" 
+        : "ALL READY! Speak or hold mic → music ducks";
+    }
+    requestAnimationFrame(loop);
+  };
+  loop();
+}
+
+// Manual push-to-talk – always works, even without mic
+const micBtn = document.getElementById('micBtn');
+micBtn.addEventListener('pointerdown', e => {
+  e.preventDefault();
+  Howler.volume(0.15, 50);
+  document.getElementById('status').innerHTML = "TALKING (Mouse Hold)";
+});
+micBtn.addEventListener('pointerup',   () => { Howler.volume(0.8, 700); updateStatus(); });
+micBtn.addEventListener('pointerleave', () => { Howler.volume(0.8, 700); updateStatus(); });
+
+function updateStatus() {
+  document.getElementById('status').innerHTML = micReady 
+    ? "ALL READY! Speak or hold mic → music ducks"
+    : "Music playing – push-to-talk with mouse works!";
+}
+
+// Start music automatically on any user gesture (helps mobile)
+document.body.addEventListener('touchstart', () => {}, {once: true});
+</script>
+
+</body>
+</html>

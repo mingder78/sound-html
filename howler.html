@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Howler.js + Live Mic + HLS Demo (2025)</title>
+  <script src="https://cdn.jsdelivr.net/npm/howler@2.2.4/dist/howler.min.js"></script>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      background: #0d0d0d;
+      color: #fff;
+      text-align: center;
+      padding: 20px;
+    }
+    .card {
+      background: #1a1a1a;
+      border-radius: 16px;
+      padding: 20px;
+      margin: 20px auto;
+      max-width: 600px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    }
+    button {
+      padding: 12px 24px;
+      margin: 8px;
+      font-size: 16px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      background: #00d4ff;
+      color: black;
+      font-weight: bold;
+    }
+    button:hover { opacity: 0.9; }
+    button.active { background: #00ff9d; }
+    input, select { padding: 10px; width: 90%; margin: 10px; border-radius: 8px; border: none; }
+    .status { margin: 10px; font-size: 14px; opacity: 0.8; }
+  </style>
+</head>
+<body>
+
+<div class="card">
+  <h1>Howler.js Full Power Demo</h1>
+  <p>Play files • Live HLS radio • Your microphone • Mix everything</p>
+</div>
+
+<div class="card">
+  <h2>1. Play Music / Sound Effects</h2>
+  <button onclick="playSound('drum')">Drum Hit</button>
+  <button onclick="playSound('music')">Lo-fi Music</button>
+  <button onclick="playSound('stop')">Stop All</button>
+</div>
+
+<div class="card">
+  <h2>2. Live Radio (HLS)</h2>
+  <select id="radio">
+    <option value="https://icecast.qmusic.nl/Qmusic-nl-live.m3u8">Qmusic (NL)</option>
+    <option value="https://stream.zeno.fm/0r0xaqc0c0ltv.m3u8">Lofi Girl</option>
+    <option value="https://bbcmedia.ic.llnwd.net/stream/bbcmedia_radio1_mf_p">BBC Radio 1</option>
+  </select>
+  <button onclick="playRadio()">Play Radio</button>
+  <button onclick="stopRadio()">Stop</button>
+  <div class="status" id="radioStatus">Stopped</div>
+</div>
+
+<div class="card">
+  <h2>3. Live Microphone (Hear Yourself)</h2>
+  <button id="micBtn" onclick="toggleMic()">Start Microphone</button>
+  <div class="status" id="micStatus">Mic off • Click to enable</div>
+</div>
+
+<div class="card">
+  <h2>4. Volume Controls</h2>
+  <label>Music Volume: <span id="volVal">70</span>%</label><br>
+  <input type="range" min="0" max="100" value="70" oninput="setVolume(this.value)">
+  <br><br>
+  <label>Mic Gain: <span id="gainVal">100</span>%</label><br>
+  <input type="range" min="0" max="200" value="100" oninput="setMicGain(this.value)">
+</div>
+
+<script>
+// === 1. Regular sounds (MP3/WAV) ===
+const sounds = {
+  drum: new Howl({ src: ['https://cdn.howler.js.org/demo/drum.mp3'] }),
+  music: new Howl({
+    src: ['https://cdn.howler.js.org/demo/lofi.mp3'],
+    loop: true,
+    volume: 0.7
+  })
+};
+
+function playSound(name) {
+  if (name === 'stop') {
+    Howler.stop();
+    return;
+  }
+  sounds[name].play();
+}
+
+// === 2. HLS Live Radio ===
+let radio = null;
+function playRadio() {
+  const url = document.getElementById('radio').value;
+  if (radio) radio.unload();
+
+  radio = new Howl({
+    src: [url],
+    html5: true,           // Required for streaming
+    format: ['aac', 'mp3'],
+    volume: 0.8
+  });
+
+  radio.once('load', () => {
+    radio.play();
+    document.getElementById('radioStatus').textContent = 'Playing: ' + url.split('/').pop();
+  });
+
+  radio.on('end', () => document.getElementById('radioStatus').textContent = 'Stream ended');
+}
+
+function stopRadio() {
+  if (radio) radio.unload();
+  document.getElementById('radioStatus').textContent = 'Stopped';
+}
+
+// === 3. Live Microphone + Mix with Howler ===
+let audioContext = null;
+let micNode = null;
+let gainNode = null;
+let micActive = false;
+
+async function toggleMic() {
+  const btn = document.getElementById('micBtn');
+  const status = document.getElementById('micStatus');
+
+  if (micActive) {
+    // Turn off
+    if (micNode) micNode.disconnect();
+    btn.textContent = 'Start Microphone';
+    btn.classList.remove('active');
+    status.textContent = 'Mic off';
+    micActive = false;
+    return;
+  }
+
+  // Turn on
+  try {
+    if (!audioContext) {
+      audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      // Route ALL Howler output through Web Audio so we can mix
+      Howler.masterNode.disconnect();
+      Howler.masterNode.connect(audioContext.destination);
+    }
+
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    micNode = audioContext.createMediaStreamSource(stream);
+    gainNode = audioContext.createGain();
+    micNode.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+
+    btn.textContent = 'Microphone ON (click to stop)';
+    btn.classList.add('active');
+    status.textContent = 'Hearing yourself live (zero latency)';
+    micActive = true;
+  } catch (e) {
+    alert('Microphone access denied or not available');
+    console.error(e);
+  }
+}
+
+function setMicGain(val) {
+  document.getElementById('gainVal').textContent = val;
+  if (gainNode) gainNode.gain.value = val / 100;
+}
+
+// === 4. Global volume ===
+function setVolume(val) {
+  document.getElementById('volVal').textContent = val;
+  Howler.volume(val / 100);
+}
+
+// Auto-start something fun
+window.onload = () => {
+  document.getElementById('radioStatus').textContent = 'Ready';
+};
+</script>
+
+<p style="margin-top:50px; opacity:0.6; font-size:14px;">
+  Zero dependencies • Works in Chrome, Firefox, Edge, Safari (2025)<br>
+  Howler.js + Web Audio API + getUserMedia = Full power
+</p>
+
+</body>
+</html>

@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HLS Audio Player</title>
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+  <style>
+    body { font-family: system-ui; text-align: center; padding: 50px; background: #1a1a1a; color: white; }
+    audio { width: 90%; max-width: 600px; margin: 20px 0; }
+    input { width: 80%; padding: 12px; font-size: 16px; }
+    button { padding: 12px 24px; font-size: 16px; }
+  </style>
+</head>
+<body>
+
+  <h1>HLS Audio-Only Player</h1>
+  <audio id="audio" controls autoplay></audio>
+  
+  <div>
+    <input type="text" id="url" placeholder="Enter .m3u8 audio stream" 
+           value="https://cdn.hls.radio/stream.m3u8">
+    <br><br>
+    <button onclick="load()">Load Stream</button>
+  </div>
+
+<script>
+  const audio = document.getElementById('audio');
+  let hls;
+
+  function load() {
+    const url = document.getElementById('url').value.trim();
+    if (!url) return alert("Enter a URL");
+
+    if (hls) hls.destroy();
+
+    // Safari natively plays HLS audio
+    if (audio.canPlayType('application/vnd.apple.mpegurl')) {
+      audio.src = url;
+      audio.play();
+    }
+    else if (Hls.isSupported()) {
+      hls = new Hls({
+        debug: false,
+        lowLatencyMode: true,
+        backBufferLength: 30,
+        maxBufferLength: 10,
+        liveSyncDurationCount: 3,
+        abrEwmaDefaultEstimate: 500_000  // Assume ~500 kbps for audio
+      });
+
+      hls.loadSource(url);
+      hls.attachMedia(audio);
+
+      hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        console.log("Audio stream loaded:", hls.levels);
+        audio.play();
+      });
+
+      hls.on(Hls.Events.ERROR, (e, data) => {
+        if (data.fatal) {
+          console.error(data);
+          alert("Stream failed: " + data.type);
+        }
+      });
+    }
+    else {
+      alert("Browser doesn't support HLS");
+    }
+  }
+
+  // Auto-load on start
+  load();
+</script>
+
+<p>Popular test audio HLS streams:</p>
+<ul style="list-style:none;">
+  <li>• https://icecast.qmusic.nl/Qmusic-nl-live.m3u8</li>
+  <li>• https://stream.zeno.fm/0r0xaqc0c0ltv.m3u8 (lofi)</li>
+  <li>• https://bbcmedia.ic.llnwd.net/stream/bbcmedia_radio1_mf_p (BBC Radio 1)</li>
+</ul>
+
+</body>
+</html>

@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<audio id="live" autoplay muted></audio>
+<button onclick="start()">Start Listening to My Mic</button>
+
+<script>
+async function start() {
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  const audio = document.getElementById('live');
+
+  // Option 1: simplest (works everywhere)
+  audio.srcObject = stream;
+
+  // Option 2: lower latency + ability to mix with Howler later
+  // const ctx = new AudioContext();
+  // const source = ctx.createMediaStreamSource(stream);
+  // source.connect(ctx.destination);
+}
+</script>

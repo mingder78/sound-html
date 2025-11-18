@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Simple HLS.js Player</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #000;
+      margin: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+    }
+    video {
+      max-width: 100%;
+      background: #000;
+    }
+    .container {
+      text-align: center;
+      color: white;
+    }
+    .controls {
+      margin-top: 10px;
+    }
+    input[type="text"] {
+      width: 600px;
+      padding: 10px;
+      font-size: 16px;
+    }
+    button {
+      padding: 10px 20px;
+      font-size: 16px;
+      margin-left: 10px;
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <h1>Simple HLS Player (hls.js)</h1>
+  <video id="video" controls autoplay muted></video>
+
+  <div class="controls">
+    <input type="text" id="streamUrl" placeholder="Enter .m3u8 URL" 
+           value="https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8">
+    <button onclick="loadStream()">Load Stream</button>
+  </div>
+</div>
+
+<!-- Load hls.js from CDN (latest stable version as of 2025) -->
+<script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+
+<script>
+  const video = document.getElementById('video');
+  const streamUrlInput = document.getElementById('streamUrl');
+  let hls;
+
+  function loadStream() {
+    const url = streamUrlInput.value.trim();
+    if (!url) {
+      alert("Please enter a valid .m3u8 URL");
+      return;
+    }
+
+    // Destroy previous instance if exists
+    if (hls) {
+      hls.destroy();
+    }
+
+    // Check if browser natively supports HLS (Safari on macOS/iOS)
+    if (video.canPlayType('application/vnd.apple.mpegurl')) {
+      video.src = url;
+      video.addEventListener('loadedmetadata', () => {
+        video.play();
+      });
+    } 
+    // Use hls.js for all other browsers (Chrome, Firefox, Edge, etc.)
+    else if (Hls.isSupported()) {
+      hls = new Hls({
+        // Recommended standard HLS config (2025 best practices)
+        debug: false,
+        enableWorker: true,
+        lowLatencyMode: true,
+        backBufferLength: 90,
+        maxBufferLength: 30,
+        maxMaxBufferLength: 60,
+        startLevel: undefined,        // auto quality
+        capLevelToPlayerSize: true,   // prevent upscaling beyond video size
+        abrEwmaDefaultEstimate: 3_000_000, // start with 3 Mbps estimate
+      });
+
+      hls.loadSource(url);
+      hls.attachMedia(video);
+
+      hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        console.log("Manifest loaded, found " + hls.levels.length + " quality levels");
+        video.play();
+      });
+
+      hls.on(Hls.Events.ERROR, (event, data) => {
+        if (data.fatal) {
+          console.error("Fatal HLS error:", data);
+          alert("Failed to load stream: " + data.type);
+        }
+      });
+    } 
+    else {
+      alert("Your browser does not support HLS playback.");
+    }
+  }
+
+  // Load default stream on page load
+  window.onload = () => {
+    loadStream();
+  };
+</script>
+
+</body>
+</html>
